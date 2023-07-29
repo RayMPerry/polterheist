@@ -1,0 +1,51 @@
+local SETTINGS = {
+	[hash("/vase")] = { speed = 15, possessed_hash = hash("vase-possessed"), unpossessed_hash = hash("vase") },
+	[hash("/bone")] = { speed = 15, possessed_hash = hash("bone-possessed"), unpossessed_hash = hash("bone") },
+	[hash("/frame")] = { speed = 15, possessed_hash = hash("frame-possessed"), unpossessed_hash = hash("frame")  },
+	[hash("/piggy-bank")] = { speed = 15, possessed_hash = hash("piggy-bank-possessed"), unpossessed_hash = hash("piggy-bank") },
+	[hash("/plate")] = { speed = 15, possessed_hash = hash("plate-possessed"), unpossessed_hash = hash("plate") },
+	[hash("/lamp")] = { speed = 15, possessed_hash = hash("lamp-possessed"), unpossessed_hash = hash("lamp")  }
+}
+
+function init(self)
+	local item_settings = SETTINGS[go.get_id()]
+	self.speed = item_settings.speed	
+	self.unpossessed_hash = item_settings.unpossessed_hash
+	self.possessed_hash = item_settings.possessed_hash
+	
+	self.is_possessed = false
+	self.is_thrown = false
+	msg.post("#hitbox", "disable")
+end
+
+function fixed_update(self, dt)
+	if not self.is_thrown then return end
+	go.set_position(go.get_position() + self.throw_vector)
+	if go.get_position().x > 1500 then go.delete() end
+end
+
+function on_message(self, message_id, message, sender)
+	if message_id == hash("trigger_response") then
+		sprite.play_flipbook("#sprite", message.enter and self.possessed_hash or self.unpossessed_hash)
+	end
+
+	if message_id == hash("possessing") then
+		self.is_possessed = true
+	end
+
+	if message_id == hash("throw") then
+		self.is_possessed = false
+		local item_position = go.get_position()
+		local enemy_position = go.get_position("/realtor")
+		local angle = math.atan2(item_position.x - enemy_position.x, enemy_position.y - item_position.y)
+		self.throw_vector = self.speed * vmath.rotate(vmath.quat_rotation_z(angle), vmath.vector3(0, 1, 0))
+		self.is_thrown = true
+		msg.post("#hitbox", "enable")
+		go.animate(".", "euler.z", go.PLAYBACK_LOOP_BACKWARD, 360, go.EASING_LINEAR, 1)
+	end
+
+	if message_id == hash("unpossessing") and not self.is_thrown then
+		self.is_possessed = false
+		msg.post("#hitbox", "disable")
+	end
+end

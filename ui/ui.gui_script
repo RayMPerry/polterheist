@@ -1,0 +1,17 @@
+function init(self)
+	self.points = 3
+	self.sp_bar_node = gui.get_node("sp_bar")
+	self.initial_size = gui.get_size(self.sp_bar_node)
+end
+
+function on_message(self, message_id, message, sender)
+	if message_id == hash("update_sp") then
+		gui.set_size(self.sp_bar_node, vmath.vector3(math.floor(self.initial_size.x * message.percentage), self.initial_size.y, self.initial_size.z))
+	end
+	if message_id == hash("update_hp") then
+		if self.points == 0 then return end
+		local point = gui.get_node("point" .. tostring(self.points))
+		self.points = math.min(3, math.max(0, self.points + message.change))
+		gui.set_visible(point, message.change > 0)
+	end
+end

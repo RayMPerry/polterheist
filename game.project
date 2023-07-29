@@ -1,0 +1,44 @@
+[bootstrap]
+main_collection = /src/main.collectionc
+render = /orthographic/render/orthographic.renderc
+
+[script]
+shared_state = 1
+
+[display]
+width = 800
+height = 450
+
+[android]
+input_method = HiddenInputField
+
+[project]
+title = Polterheist
+version = 0.3
+developer = RaycatWhoDat
+bundle_resources = 
+dependencies#0 = https://github.com/britzl/defold-orthographic/archive/master.zip
+
+[graphics]
+default_texture_min_filter = nearest
+default_texture_mag_filter = nearest
+
+[physics]
+use_fixed_timestep = 1
+debug = 0
+
+[render]
+clear_color_red = 0.178
+clear_color_green = 0.143
+clear_color_blue = 0.156
+clear_color_alpha = 1.0
+
+[html5]
+show_made_with_defold = 0
+show_fullscreen_button = 1
+show_console_banner = 0
+cssfile = /builtins/manifests/web/dark_theme.css
+
+[sprite]
+subpixels = 0
+

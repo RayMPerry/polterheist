@@ -1,0 +1,42 @@
+function init(self)
+	self.direction = 1
+	msg.post("#sprite", "disable")
+	msg.post("#hitbox_left", "disable")
+	msg.post("#hitbox_right", "disable")
+end
+
+function run(self)
+	return timer.delay(1, false, function ()
+		sprite.play_flipbook("#sprite", hash("attack"))
+		local hitbox_url = "#hitbox_" .. (self.direction == -1 and "left" or "right")
+		msg.post(hitbox_url, "enable")
+		self.timer = timer.delay(1, false, function () 
+			msg.post(hitbox_url, "disable")
+			sprite.play_flipbook("#sprite", hash("idle"))
+			self.timer = timer.delay(1, false, function ()
+				self.direction = self.direction == -1 and 1 or -1
+				sprite.set_hflip("#sprite", self.direction == 1)
+				sprite.play_flipbook("#sprite", hash("run"))
+				go.animate(".", "position", go.PLAYBACK_ONCE_FORWARD, vmath.vector3(self.direction == -1 and self.min_x_position or self.max_x_position, self.initial_position.y, self.initial_position.z), go.EASING_LINEAR, 1, 0, function ()
+					sprite.play_flipbook("#sprite", hash("idle"))
+					self.timer = run(self)
+				end)
+			end)
+		end)
+	end)
+end
+
+function on_message(self, message_id, message, sender)
+	if message_id == hash("activate") then
+		msg.post("#sprite", "enable")
+		sprite.set_hflip("#sprite", true)
+		local position =  go.get_position()
+		go.animate(".", "position", go.PLAYBACK_ONCE_FORWARD, vmath.vector3(position.x + 750, position.y, position.z), go.EASING_LINEAR, 4, 0, function () 
+			sprite.play_flipbook("#sprite", hash("idle"))
+			self.initial_position = go.get_position()
+			self.min_x_position = self.initial_position.x - 200
+			self.max_x_position = self.initial_position.x + 50
+			self.timer = run(self)
+		end)
+	end
+end

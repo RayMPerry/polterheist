@@ -1,0 +1,283 @@
+local camera = require "orthographic.camera"
+
+local movements = {
+   [hash("up")] = function(self) self.y_vel = self.y_vel + self.speed end,
+   [hash("down")] = function(self) self.y_vel = self.y_vel - self.speed end,
+   [hash("left")] = function(self) self.x_vel = self.x_vel - self.speed end,
+   [hash("right")] = function(self) self.x_vel = self.x_vel + self.speed end
+}
+
+function toggle_sprites(self)
+   if self.is_body_visible then
+      msg.post("#body_sprite", "disable")
+      msg.post("#eyes_sprite", "enable")
+   else
+      msg.post("#body_sprite", "enable")
+      msg.post("#eyes_sprite", "disable")
+   end
+   self.is_body_visible = not self.is_body_visible
+end
+
+function reset(self)
+   self.speed = 15
+   self.health = 3
+   self.spirit = 100
+   self.decay_factor = 0.95
+   self.direction = -1
+   self.x_vel = 0
+   self.y_vel = 0
+   self.correction = vmath.vector3()
+   self.is_input_locked = false
+   self.is_possessing = false
+   self.is_scaring = false
+   self.is_body_visible = true
+   self.held_keys = {
+      [hash("up")] = false,
+      [hash("down")] = false,
+      [hash("left")] = false,
+      [hash("right")] = false,
+      [hash("scare")] = false
+   }
+
+   msg.post("#hitbox", "disable")
+   msg.post("#body_sprite", "enable")
+   msg.post("#eyes_sprite", "disable")
+   go.set("#body_sprite", "tint", vmath.vector4(1,1,1,0.85))
+
+   -- TODO: Lift to main
+   sound.play("/scene#music", { gain = 1.6 })
+end
+
+function update_spirit(self, dt)
+    if self.is_possessing then
+        self.spirit = math.max(0, self.spirit - (35 * dt))
+        if self.spirit == 0 then
+            self.is_possessing = false
+            self.is_input_locked = true
+            unpossess(self)
+        end 
+    else
+        self.spirit = math.min(100, self.spirit + (50 * dt))
+    end 
+    msg.post("/ui", "update_sp", { percentage = self.spirit / 100 })
+end
+
+function update_position(self, dt)
+   self.correction = vmath.vector3()
+
+   if self.x_vel == 0 and self.y_vel == 0 then
+      return
+   end
+
+   local pos = go.get_position()
+   go.set_position(vmath.vector3(pos.x + (self.x_vel * dt), pos.y + (self.y_vel * dt), pos.z))
+   self.x_vel = self.x_vel * self.decay_factor
+   self.y_vel = self.y_vel * self.decay_factor
+   if not self.is_input_locked and math.abs(self.x_vel) > 0 then
+      self.direction = self.x_vel / math.abs(self.x_vel)
+   end
+   if math.abs(self.x_vel) < 0.01 then self.x_vel = 0 end
+   if math.abs(self.y_vel) < 0.01 then self.y_vel = 0 end
+end
+
+function possess(self)
+    -- msg.post("#hurtbox", "disable")
+    sprite.play_flipbook("#body_sprite", hash("possession_enter"), function (self)
+        self.is_possessing = true
+        msg.post(self.possess_target, "possessing")
+        self.is_input_locked = false
+        go.set_position(vmath.vector3(self.exit_point.x, self.exit_point.y, go.get_position().z))
+        toggle_sprites(self)
+    end)
+end
+
+function unpossess(self)
+    msg.post(self.possess_target, "unpossessing")
+    local position = go.get_position()
+    go.set_position(vmath.vector3(self.exit_point.x, self.exit_point.y + 56, position.z))
+    toggle_sprites(self)
+    sprite.play_flipbook("#body_sprite", hash("possession_exit"), function (self)
+        -- msg.post("#hurtbox", "enable")
+        sprite.play_flipbook("#body_sprite", hash("idle"))
+        self.is_possessing = false
+        self.is_input_locked = false
+    end)
+end
+
+function toggle_possession(self)
+   self.x_vel = 0
+   self.y_vel = 0
+   self.is_input_locked = true
+   if not self.is_possessing then
+      possess(self)
+   else
+      self.is_possessing = false
+      unpossess(self)
+   end
+end
+
+function scare(self, action)
+   if action.pressed then
+      self.is_scaring = true
+      msg.post("#hitbox", "enable")
+      sprite.play_flipbook("#body_sprite", hash("scare_start"), function ()
+         change_animation(hash("scare_hold"))
+      end)
+   end
+
+   if action.released then
+      sprite.play_flipbook("#body_sprite", hash("scare_finish"), function (self)
+         self.is_scaring = false
+         msg.post("#hitbox", "disable")
+         change_animation(hash("idle"))
+      end)
+   end
+
+   if not action.pressed and action.repeated then
+      local current_animation = go.get("#body_sprite", "animation")
+      if current_animation ~= hash("scare_start") or current_animation ~= hash("scare_finish") then
+         change_animation(hash("scare_hold"))
+      end
+   end
+end
+
+function throw(self)
+   msg.post(self.possess_target, "throw")
+   toggle_sprites(self)
+   self.is_possessing = false
+   sprite.play_flipbook("#body_sprite", hash("possession_exit"), function (self)
+      sprite.play_flipbook("#body_sprite", hash("idle"))
+      self.is_input_locked = false
+   end)
+end
+
+function damage(self, x_vel, y_vel)
+   if self.damage_timer then
+      return
+   end
+
+   self.is_input_locked = true
+   self.x_vel = x_vel or self.x_vel * -1
+   self.y_vel = y_vel or self.y_vel * -1
+   change_animation(hash("damage"))
+   self.health = self.health - 1
+   msg.post("/ui", "update_hp", { change = -1 })
+   self.damage_timer = timer.delay(0.5, false, function ()
+      if self.health == 0 then
+         msg.post("main:/root", hash("restart"))
+      else
+         change_animation(hash("idle"))
+         self.is_input_locked = false
+         self.damage_timer = nil
+      end
+   end)
+end
+
+function change_animation(animation_hash)
+   if go.get("#body_sprite", "animation") ~= animation_hash then
+      sprite.play_flipbook("#body_sprite", animation_hash)
+   end
+end
+
+function init(self)
+   reset(self)
+   msg.post(".", "acquire_input_focus")
+end
+
+function fixed_update(self, dt)
+   sprite.set_hflip("#body_sprite", self.direction == 1)
+   update_position(self, dt)
+   update_spirit(self, dt)
+end
+
+function on_message(self, message_id, message, sender)
+if message_id == hash("trigger_response") then
+    if message.other_group == hash("possessable") then
+        if message.enter then
+            self.exit_point = go.get_position(message.other_id)
+            self.possess_target = message.other_id
+        else
+            self.exit_point = nil
+            self.possess_target = nil
+        end
+    end
+    if message.other_group == hash("enemy_attack") and message.enter then
+        damage(self, self.speed * 3, self.speed * 3)
+    end
+end
+
+   -- Stolen from Defold docs
+   if message_id == hash("contact_point_response") and message.other_group == hash("barrier") then
+      if message.distance > 0 then
+         local proj = vmath.project(self.correction, message.normal * message.distance)
+         if proj < 1 then
+            local comp = (message.distance - message.distance * proj) * message.normal
+            go.set_position(go.get_position() + comp)
+            self.correction = self.correction + comp
+         end
+         self.x_vel = 0
+         self.y_vel = 0
+      end
+   end
+end
+
+function on_input(self, action_id, action)
+   if action_id == hash("quit") and action.pressed then
+      sys.exit(0)
+   end
+
+   if self.held_keys[action_id] ~= nil and action.pressed then
+      self.held_keys[action_id] = true
+   end
+
+   if self.held_keys[action_id] ~= nil and action.released then
+      self.held_keys[action_id] = false
+   end
+
+   if self.is_input_locked then
+      return
+   end
+
+   if action_id == hash("scare") then
+      if self.is_possessing and action.pressed then
+         throw(self)
+         return
+      elseif not self.is_possessing then
+         scare(self, action)
+      end
+   end
+
+   if action_id == hash("possess") and action.pressed then
+      if self.possess_target and self.spirit > 0 then
+         toggle_possession(self)
+         return
+      end
+   end
+
+   if action_id == hash("up") or action_id == hash("down") or action_id == hash("left") or action_id == hash("right") then
+      if self.is_possessing then
+         return
+      end
+      if not self.is_scaring then
+         change_animation(hash("move"))
+      end
+
+      movements[action_id](self)
+   end
+
+   local all_keys_released = true
+   for _, value in pairs(self.held_keys) do
+      if value then
+         all_keys_released = false
+         break
+      end
+   end
+
+   if all_keys_released and not self.is_scaring and not self.is_possessing then
+      change_animation(hash("idle"))
+   end
+
+   if action_id == hash("debug__damage") and action.pressed then
+      damage(self)
+   end
+end

@@ -1,0 +1,93 @@
+function init(self)
+   self.direction = -1
+   self.speed = 4
+   self.level = 0
+   self.is_scared = false
+   -- advance_stage(self, 2)
+end
+
+function fixed_update(self, dt)
+   if not self.is_scared then
+      -- go.set_position(go.get_position() + vmath.vector3(self.direction * self.speed, 0, 0))
+   end
+end
+
+function walk(self, delay)
+    return timer.delay(delay or 2, false, function ()
+        local adjustment = 1
+        sprite.set_hflip("#sprite", self.direction == 1)
+        sprite.play_flipbook("#sprite", hash("walk_alerted"))
+        if delay then
+            adjustment = go.get_position().x / self.max_x_position
+            adjustment = self.direction == -1 and adjustment or (1 - adjustment)
+        end
+        go.animate(".", "position", go.PLAYBACK_ONCE_FORWARD, vmath.vector3(self.direction == -1 and self.min_x_position or self.max_x_position, self.initial_position.y, self.initial_position.z), go.EASING_LINEAR, math.max(3.5 * adjustment, 1), 0, function ()
+            self.direction = self.direction == -1 and 1 or -1
+            sprite.set_hflip("#sprite", false)
+            sprite.play_flipbook("#sprite", hash("idle_shocked"))
+            self.timer2 = walk(self)
+        end)
+    end)
+end
+
+function advance_stage(self, level)
+    go.cancel_animations(".", "position")
+    self.level = level or self.level + 1
+    if self.level == 1 then
+        sprite.play_flipbook("#sprite", hash("shock_level_0"), function ()
+            sprite.play_flipbook("#sprite", hash("idle_unalerted"))
+        end)
+    elseif self.level == 2 then
+        sprite.play_flipbook("#sprite", hash("shock_level_1"), function ()
+            go.set_position(go.get_position() + vmath.vector3(0, -5, 0))
+            sprite.play_flipbook("#sprite", hash("idle_shocked"))
+            self.initial_position = go.get_position()
+            self.min_x_position = self.initial_position.x - 500
+            self.max_x_position = self.initial_position.x + 75
+            self.timer2 = walk(self)
+        end)
+    elseif self.level == 3 then
+        sprite.play_flipbook("#sprite", hash("fear"))
+        self.timer3 = timer.delay(0.35, false, function (self) 
+            sprite.play_flipbook("#sprite", hash("call_start"), function (self)
+                sprite.play_flipbook("#sprite", hash("call_hold"))
+                self.timer3 = timer.delay(1, false, function (self)
+                    sprite.play_flipbook("#sprite", hash("idle_alerted"))
+                    msg.post("/ghostbusta", hash("activate"))
+                end)
+            end) 
+        end)
+    elseif self.level == 4 then
+        sprite.play_flipbook("#sprite", hash("fear"))
+        self.timer4 = timer.delay(0.35, false, function (self)
+            sprite.play_flipbook("#sprite", hash("idle_alerted"))
+        end)
+    elseif self.level == 5 then
+        sprite.play_flipbook("#sprite", hash("fear"))
+        self.timer5 = timer.delay(0.35, false, function (self)
+            sprite.play_flipbook("#sprite", hash("run_panic"))
+            local position = go.get_position()
+            go.animate(".", "position", go.PLAYBACK_ONCE_FORWARD, vmath.vector3(position.x - 1500, position.y - 30, position.z), go.EASING_LINEAR, 3)
+            msg.post("camera", "follow", { target = go.get_id(), lerp = 0.7, horizontal = true, vertical = false })
+        end)
+    end
+end
+
+function on_message(self, message_id, message, sender)
+    if message_id == hash("trigger_response") and message.enter then
+        if message.other_group == hash("attack") then
+            advance_stage(self)
+        end
+        if message.other_group == hash("scare") and go.get("#sprite", "animation") ~= hash("idle_shocked") and self.level >= 2 then
+            if self.timer2 then 
+                timer.cancel(self.timer2)
+                go.cancel_animations(".", "position")
+            end
+            sprite.play_flipbook("#sprite", hash("fear"))
+            self.timer0 = timer.delay(0.35, false, function ()
+                self.direction = self.direction == 1 and -1 or 1
+                self.timer2 = walk(self, 0)
+            end)
+        end
+    end
+end

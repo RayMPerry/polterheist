@@ -1,0 +1,55 @@
+image: "/src/assets/tileset_rooms-sheet.png"
+tile_width: 48
+tile_height: 48
+tile_margin: 0
+tile_spacing: 0
+collision: "/src/assets/tileset_rooms-sheet.png"
+material_tag: "tile"
+convex_hulls {
+  index: 0
+  count: 4
+  collision_group: ""
+}
+convex_hulls {
+  index: 4
+  count: 4
+  collision_group: ""
+}
+convex_hulls {
+  index: 8
+  count: 4
+  collision_group: ""
+}
+convex_hulls {
+  index: 12
+  count: 4
+  collision_group: ""
+}
+convex_hulls {
+  index: 16
+  count: 4
+  collision_group: ""
+}
+convex_hulls {
+  index: 20
+  count: 4
+  collision_group: ""
+}
+convex_hulls {
+  index: 24
+  count: 4
+  collision_group: ""
+}
+convex_hulls {
+  index: 28
+  count: 4
+  collision_group: ""
+}
+convex_hulls {
+  index: 32
+  count: 4
+  collision_group: ""
+}
+extrude_borders: 2
+inner_padding: 0
+sprite_trim_mode: SPRITE_TRIM_MODE_OFF
